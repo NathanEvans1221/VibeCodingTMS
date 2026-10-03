@@ -1,19 +1,25 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash
 from datetime import datetime
-import json
+from itertools import count
+from math import isfinite
+import os
+from secrets import token_hex
 
 app = Flask(__name__)
-app.secret_key = 'tms_demo_secret_key_2024'
+app.secret_key = os.environ.get("TMS_SECRET_KEY") or token_hex(32)
 
 # 全域資料儲存（不使用資料庫）
 cargo_data = []
 routes_data = []
 shipments_data = []
+_cargo_ids = count(1)
+_route_ids = count(1)
+_shipment_ids = count(1)
 
 class Cargo:
     def __init__(self, name, quantity, weight, description=""):
-        self.id = len(cargo_data) + 1
+        self.id = next(_cargo_ids)
         self.name = name
         self.quantity = quantity
         self.weight = weight
@@ -22,7 +28,7 @@ class Cargo:
 
 class Route:
     def __init__(self, name, start_point, end_point, waypoints=None):
-        self.id = len(routes_data) + 1
+        self.id = next(_route_ids)
         self.name = name
         self.start_point = start_point
         self.end_point = end_point
@@ -31,11 +37,51 @@ class Route:
 
 class Shipment:
     def __init__(self, cargo_id, route_id, status="待配送"):
-        self.id = len(shipments_data) + 1
+        self.id = next(_shipment_ids)
         self.cargo_id = cargo_id
         self.route_id = route_id
         self.status = status
         self.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _required_text(field, label):
+    value = request.form.get(field, "").strip()
+    if not value:
+        flash(f"{label}不可空白！", "error")
+        return None
+    return value
+
+
+def _cargo_form_values():
+    name = _required_text("name", "貨物名稱")
+    try:
+        quantity = int(request.form.get("quantity", ""))
+        weight = float(request.form.get("weight", ""))
+    except (TypeError, ValueError):
+        flash("數量必須是正整數，重量必須是非負數字！", "error")
+        return None
+    if quantity < 1 or not isfinite(weight) or weight < 0:
+        flash("數量必須至少為 1，重量不可為負數！", "error")
+        return None
+    if name is None:
+        return None
+    return name, quantity, weight, request.form.get("description", "").strip()
+
+
+def _route_form_values():
+    values = [
+        _required_text("name", "路線名稱"),
+        _required_text("start_point", "路線起點"),
+        _required_text("end_point", "路線終點"),
+    ]
+    if any(value is None for value in values):
+        return None
+    waypoints = [
+        point.strip()
+        for point in request.form.get("waypoints", "").split(",")
+        if point.strip()
+    ]
+    return (*values, waypoints)
 
 # 首頁路由
 @app.route('/')
@@ -73,10 +119,10 @@ def cargo_list():
 @app.route('/cargo/add', methods=['GET', 'POST'])
 def cargo_add():
     if request.method == 'POST':
-        name = request.form['name']
-        quantity = int(request.form['quantity'])
-        weight = float(request.form['weight'])
-        description = request.form.get('description', '')
+        values = _cargo_form_values()
+        if values is None:
+            return redirect(url_for('cargo_add'))
+        name, quantity, weight, description = values
         
         new_cargo = Cargo(name, quantity, weight, description)
         cargo_data.append(new_cargo)
@@ -93,19 +139,25 @@ def cargo_edit(cargo_id):
         return redirect(url_for('cargo_list'))
     
     if request.method == 'POST':
-        cargo.name = request.form['name']
-        cargo.quantity = int(request.form['quantity'])
-        cargo.weight = float(request.form['weight'])
-        cargo.description = request.form.get('description', '')
+        values = _cargo_form_values()
+        if values is None:
+            return redirect(url_for('cargo_edit', cargo_id=cargo_id))
+        cargo.name, cargo.quantity, cargo.weight, cargo.description = values
         
         flash('貨物 "{}" 已成功更新！'.format(cargo.name), 'success')
         return redirect(url_for('cargo_list'))
     
     return render_template('cargo_form.html', title='編輯貨物', cargo=cargo)
 
-@app.route('/cargo/delete/<int:cargo_id>')
+@app.route('/cargo/delete/<int:cargo_id>', methods=['POST'])
 def cargo_delete(cargo_id):
     global cargo_data
+    if any(shipment.cargo_id == cargo_id for shipment in shipments_data):
+        flash('此貨物已有配送紀錄，請先刪除相關配送後再操作！', 'error')
+        return redirect(url_for('cargo_list'))
+    if not any(cargo.id == cargo_id for cargo in cargo_data):
+        flash('找不到指定的貨物！', 'error')
+        return redirect(url_for('cargo_list'))
     cargo_data = [c for c in cargo_data if c.id != cargo_id]
     flash('貨物已成功刪除！', 'success')
     return redirect(url_for('cargo_list'))
@@ -123,13 +175,10 @@ def routes_list():
 @app.route('/routes/add', methods=['GET', 'POST'])
 def routes_add():
     if request.method == 'POST':
-        name = request.form['name']
-        start_point = request.form['start_point']
-        end_point = request.form['end_point']
-        waypoints_text = request.form.get('waypoints', '')
-        
-        # 處理途經站點
-        waypoints = [wp.strip() for wp in waypoints_text.split(',') if wp.strip()]
+        values = _route_form_values()
+        if values is None:
+            return redirect(url_for('routes_add'))
+        name, start_point, end_point, waypoints = values
         
         new_route = Route(name, start_point, end_point, waypoints)
         routes_data.append(new_route)
@@ -146,20 +195,25 @@ def routes_edit(route_id):
         return redirect(url_for('routes_list'))
     
     if request.method == 'POST':
-        route.name = request.form['name']
-        route.start_point = request.form['start_point']
-        route.end_point = request.form['end_point']
-        waypoints_text = request.form.get('waypoints', '')
-        route.waypoints = [wp.strip() for wp in waypoints_text.split(',') if wp.strip()]
+        values = _route_form_values()
+        if values is None:
+            return redirect(url_for('routes_edit', route_id=route_id))
+        route.name, route.start_point, route.end_point, route.waypoints = values
         
         flash('路線 "{}" 已成功更新！'.format(route.name), 'success')
         return redirect(url_for('routes_list'))
     
     return render_template('routes_form.html', title='編輯路線', route=route)
 
-@app.route('/routes/delete/<int:route_id>')
+@app.route('/routes/delete/<int:route_id>', methods=['POST'])
 def routes_delete(route_id):
     global routes_data
+    if any(shipment.route_id == route_id for shipment in shipments_data):
+        flash('此路線已有配送紀錄，請先刪除相關配送後再操作！', 'error')
+        return redirect(url_for('routes_list'))
+    if not any(route.id == route_id for route in routes_data):
+        flash('找不到指定的路線！', 'error')
+        return redirect(url_for('routes_list'))
     routes_data = [r for r in routes_data if r.id != route_id]
     flash('路線已成功刪除！', 'success')
     return redirect(url_for('routes_list'))
@@ -183,8 +237,12 @@ def shipments_list():
 @app.route('/shipments/assign', methods=['GET', 'POST'])
 def shipments_assign():
     if request.method == 'POST':
-        cargo_id = int(request.form['cargo_id'])
-        route_id = int(request.form['route_id'])
+        try:
+            cargo_id = int(request.form.get('cargo_id', ''))
+            route_id = int(request.form.get('route_id', ''))
+        except (TypeError, ValueError):
+            flash('請選擇有效的貨物和路線！', 'error')
+            return redirect(url_for('shipments_assign'))
         
         # 檢查貨物和路線是否存在
         cargo = next((c for c in cargo_data if c.id == cargo_id), None)
@@ -207,20 +265,39 @@ def shipments_assign():
     
     return render_template('shipments_assign.html', cargo_list=cargo_data, routes_list=routes_data)
 
-@app.route('/shipments/update_status/<int:shipment_id>/<status>')
+@app.route('/shipments/update_status/<int:shipment_id>/<status>', methods=['POST'])
 def shipments_update_status(shipment_id, status):
     shipment = next((s for s in shipments_data if s.id == shipment_id), None)
-    if shipment:
+    allowed_transitions = {
+        '待配送': {'配送中', '已取消'},
+        '配送中': {'已送達', '已取消'},
+    }
+    if shipment is None:
+        flash('找不到指定的配送紀錄！', 'error')
+    elif status not in allowed_transitions.get(shipment.status, set()):
+        flash('此配送狀態轉換不合法！', 'error')
+    else:
         shipment.status = status
         flash('配送狀態已更新！', 'success')
     return redirect(url_for('shipments_list'))
 
-@app.route('/shipments/delete/<int:shipment_id>')
+@app.route('/shipments/delete/<int:shipment_id>', methods=['POST'])
 def shipments_delete(shipment_id):
     global shipments_data
+    if not any(shipment.id == shipment_id for shipment in shipments_data):
+        flash('找不到指定的配送紀錄！', 'error')
+        return redirect(url_for('shipments_list'))
     shipments_data = [s for s in shipments_data if s.id != shipment_id]
     flash('配送記錄已刪除！', 'success')
     return redirect(url_for('shipments_list'))
 
+def run_app():
+    app.run(
+        debug=os.environ.get("TMS_DEBUG") == "1",
+        host=os.environ.get("TMS_HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "5000")),
+    )
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    run_app()

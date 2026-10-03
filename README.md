@@ -34,7 +34,7 @@ VibeCodingTMS/
 │   ├── routes_form.html  # 路線表單
 │   ├── shipments_list.html    # 配送列表
 │   └── shipments_assign.html  # 配送安排
-├── static/               # 靜態檔案（CSS、JS）
+├── tests/                # Flask 路由回歸測試
 ├── requirements.txt      # Python 依賴套件
 └── README.md            # 專案說明
 ```
@@ -42,7 +42,7 @@ VibeCodingTMS/
 ## 🛠️ 安裝與執行
 
 ### 📋 環境需求
-- Python 3.7 或以上版本 🐍
+- Python 3.11.9（版本記錄於 `.python-version`）🐍
 - pip 套件管理器 📦
 
 ### ⚙️ 安裝步驟
@@ -55,16 +55,16 @@ VibeCodingTMS/
 
 2. **📦 安裝依賴套件**
    ```bash
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
    ```
 
 3. **▶️ 執行應用程式**
    ```bash
-   python app.py
+   python run.py
    ```
 
 4. **🌐 開啟瀏覽器**
-   訪問 `http://localhost:5000`
+   訪問 [http://localhost:5000](http://localhost:5000)。預設只接受本機連線，按 `Ctrl+C` 停止服務。
 
 ## 📖 使用說明
 
@@ -124,6 +124,21 @@ VibeCodingTMS/
 - 🧪 原型開發
 - 📚 學習和測試
 
+刪除或修改配送狀態使用 POST；已有配送紀錄的貨物或路線不可直接刪除。新增與編輯表單會由伺服器檢查必填欄位、數量與重量。
+
+### 執行測試
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+### 執行設定
+
+- `TMS_SECRET_KEY`：設定 Flask session 簽章密鑰；未設定時每次啟動會產生臨時隨機密鑰，正式環境請設定固定的隨機密鑰。
+- `TMS_HOST`：監聽位址，預設 `127.0.0.1`。
+- `PORT`：服務連接埠，預設 `5000`。
+- `TMS_DEBUG=1`：明確啟用除錯模式，預設關閉。
+
 ### 🚀 擴展建議
 如需生產環境使用，建議：
 - 🗄️ 整合資料庫（SQLite、PostgreSQL、MySQL）
@@ -136,7 +151,7 @@ VibeCodingTMS/
 
 - **🐍 後端**：Python Flask
 - **🌐 前端**：HTML5、CSS3、JavaScript
-- **🎨 UI框架**：Bootstrap 5
+- **🎨 UI框架**：Bootstrap 5（CDN）
 - **✨ 圖示**：Font Awesome 6
 - **⚙️ 模板引擎**：Jinja2
 

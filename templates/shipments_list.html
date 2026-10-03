@@ -79,30 +79,34 @@
                                 <div class="btn-group" role="group">
                                     <!-- 狀態更新按鈕 -->
                                     {% if item.shipment.status == '待配送' %}
-                                        <a href="{{ url_for('shipments_update_status', shipment_id=item.shipment.id, status='配送中') }}" 
-                                           class="btn btn-sm btn-outline-warning" title="開始配送">
-                                            <i class="fas fa-play"></i>
-                                        </a>
+                                        <form method="POST" action="{{ url_for('shipments_update_status', shipment_id=item.shipment.id, status='配送中') }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="開始配送">
+                                                <i class="fas fa-play"></i>
+                                            </button>
+                                        </form>
                                     {% elif item.shipment.status == '配送中' %}
-                                        <a href="{{ url_for('shipments_update_status', shipment_id=item.shipment.id, status='已送達') }}" 
-                                           class="btn btn-sm btn-outline-success" title="標記送達">
-                                            <i class="fas fa-check"></i>
-                                        </a>
+                                        <form method="POST" action="{{ url_for('shipments_update_status', shipment_id=item.shipment.id, status='已送達') }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-success" title="標記送達">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                        </form>
                                     {% endif %}
                                     
                                     {% if item.shipment.status in ['待配送', '配送中'] %}
-                                        <a href="{{ url_for('shipments_update_status', shipment_id=item.shipment.id, status='已取消') }}" 
-                                           class="btn btn-sm btn-outline-danger" 
-                                           onclick="return confirm('確定要取消此配送嗎？')" title="取消配送">
-                                            <i class="fas fa-times"></i>
-                                        </a>
+                                        <form method="POST" action="{{ url_for('shipments_update_status', shipment_id=item.shipment.id, status='已取消') }}"
+                                              onsubmit="return confirm('確定要取消此配送嗎？')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="取消配送">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </form>
                                     {% endif %}
                                     
-                                    <a href="{{ url_for('shipments_delete', shipment_id=item.shipment.id) }}" 
-                                       class="btn btn-sm btn-outline-danger" 
-                                       onclick="return confirm('確定要刪除此配送記錄嗎？')" title="刪除記錄">
-                                        <i class="fas fa-trash"></i>
-                                    </a>
+                                    <form method="POST" action="{{ url_for('shipments_delete', shipment_id=item.shipment.id) }}"
+                                          onsubmit="return confirm('確定要刪除此配送記錄嗎？')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="刪除記錄">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>
